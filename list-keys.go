@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// rewriteFrontMatter rewrites a file's front-matter to keep only the keywords field
-func rewriteFrontMatter(filePath string) error {
+// moveKeywordsBelowHeading moves keywords from front-matter to below the first heading
+func moveKeywordsBelowHeading(filePath string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
@@ -51,18 +51,21 @@ func rewriteFrontMatter(filePath string) error {
 		return fmt.Errorf("no valid YAML front-matter found")
 	}
 
-	// Extract keywords lines manually to preserve # characters
-	var keywordLines []string
+	// Extract keyword values (the items in the list)
+	var keywords []string
 	inKeywords := false
 	for _, line := range frontMatterLines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "keywords:") {
 			inKeywords = true
-			keywordLines = append(keywordLines, line)
 		} else if inKeywords {
 			// Check if this is still part of the keywords list (starts with -)
 			if strings.HasPrefix(trimmed, "-") {
-				keywordLines = append(keywordLines, line)
+				// Extract the keyword value after the dash
+				keyword := strings.TrimSpace(strings.TrimPrefix(trimmed, "-"))
+				if keyword != "" {
+					keywords = append(keywords, keyword)
+				}
 			} else if trimmed != "" && !strings.HasPrefix(trimmed, "-") {
 				// We've reached a new key, stop collecting keywords
 				break
@@ -70,16 +73,31 @@ func rewriteFrontMatter(filePath string) error {
 		}
 	}
 
-	// Build the new file content
-	var newContent strings.Builder
-	newContent.WriteString("---\n")
-	if len(keywordLines) > 0 {
-		newContent.WriteString(strings.Join(keywordLines, "\n"))
-		newContent.WriteString("\n")
+	// Find the first heading and insert keywords after it
+	var newContentLines []string
+	firstHeadingFound := false
+
+	for _, line := range contentLines {
+		newContentLines = append(newContentLines, line)
+
+		// Check if this is the first heading
+		if !firstHeadingFound && strings.HasPrefix(strings.TrimSpace(line), "#") {
+			firstHeadingFound = true
+
+			// Always add a blank line after heading
+			newContentLines = append(newContentLines, "")
+
+			// Add keywords as bulleted list
+			for _, keyword := range keywords {
+				newContentLines = append(newContentLines, "- "+keyword)
+			}
+		}
 	}
-	newContent.WriteString("---\n")
-	newContent.WriteString(strings.Join(contentLines, "\n"))
-	if len(contentLines) > 0 {
+
+	// Build the new file content (no front-matter)
+	var newContent strings.Builder
+	newContent.WriteString(strings.Join(newContentLines, "\n"))
+	if len(newContentLines) > 0 {
 		newContent.WriteString("\n")
 	}
 
@@ -116,10 +134,10 @@ func main() {
 	processedCount := 0
 	errorCount := 0
 
-	fmt.Printf("Rewriting front-matter to keep only 'keywords' field...\n\n")
+	fmt.Printf("Moving keywords from front-matter to below first heading...\n\n")
 
 	for _, file := range files {
-		if err := rewriteFrontMatter(file); err != nil {
+		if err := moveKeywordsBelowHeading(file); err != nil {
 			fmt.Fprintf(os.Stderr, "❌ %s: %v\n", filepath.Base(file), err)
 			errorCount++
 		} else {

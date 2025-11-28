@@ -30,7 +30,7 @@ Backups are named with ISO-8601 timestamps, e.g., `zettelkasten-2025-11-28T14:30
 
 ## list-keys
 
-Rewrites the YAML front-matter in all markdown files to keep only the `keywords` field, removing all other fields (ID, title, date, etc.).
+Moves keywords from YAML front-matter to a bulleted list below the first heading, and removes the front-matter entirely.
 
 ### Prerequisites
 
@@ -75,9 +75,10 @@ export ZETTEL_DIR="$HOME/Documents/notes"
 
 The tool will:
 - Scan all `.md` files in the specified directory
-- Rewrite each file's front-matter to keep only the `keywords` field
-- Preserve the `keywords` values exactly as-is (including `#` characters)
-- Remove all other front-matter fields (ID, title, date, etc.)
-- Preserve all content after the front-matter
+- Extract `keywords` from the YAML front-matter
+- Insert keywords as a bulleted list immediately below the first heading
+- Remove the entire YAML front-matter section
+- Preserve keyword values exactly as-is (including `#` characters)
+- Preserve all other content
 
 **Warning**: This tool modifies files in place. Make sure to back up your Zettelkasten before running it.
