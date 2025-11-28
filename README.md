@@ -28,9 +28,9 @@ export ZETTEL_BACKUP_DIR="$HOME/backups/notes"
 
 Backups are named with ISO-8601 timestamps, e.g., `zettelkasten-2025-11-28T14:30:45Z.tar.gz`
 
-## verify-ids
+## list-keys
 
-Verifies that the ID in the YAML front-matter matches the ID in the filename for all markdown files in your Zettelkasten.
+Rewrites the YAML front-matter in all markdown files to keep only the `keywords` field, removing all other fields (ID, title, date, etc.).
 
 ### Prerequisites
 
@@ -40,19 +40,19 @@ Verifies that the ID in the YAML front-matter matches the ID in the filename for
 
 ```bash
 go mod download
-go build -o verify-ids verify-ids.go
+go build -o list-keys list-keys.go
 ```
 
 ### Usage
 
 ```bash
-./verify-ids
+./list-keys
 ```
 
 Or specify a custom directory:
 
 ```bash
-./verify-ids /path/to/zettelkasten
+./list-keys /path/to/zettelkasten
 ```
 
 ### Environment Variables
@@ -63,18 +63,21 @@ Or specify a custom directory:
 
 ```bash
 # Use default directory
-./verify-ids
+./list-keys
 
 # Use custom directory
-./verify-ids ~/Documents/notes
+./list-keys ~/Documents/notes
 
 # Use environment variable
 export ZETTEL_DIR="$HOME/Documents/notes"
-./verify-ids
+./list-keys
 ```
 
 The tool will:
-- Check all `.md` files in the specified directory
-- Parse the YAML front-matter to extract the `ID` field
-- Compare it with the filename (without `.md` extension)
-- Report any mismatches with an error exit code
+- Scan all `.md` files in the specified directory
+- Rewrite each file's front-matter to keep only the `keywords` field
+- Preserve the `keywords` values exactly as-is (including `#` characters)
+- Remove all other front-matter fields (ID, title, date, etc.)
+- Preserve all content after the front-matter
+
+**Warning**: This tool modifies files in place. Make sure to back up your Zettelkasten before running it.
