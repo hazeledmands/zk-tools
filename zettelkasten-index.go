@@ -17,6 +17,12 @@ type Heading struct {
 	SortKey  string // Lowercase version for case-insensitive sorting
 }
 
+// HeadingGroup represents an H1 heading with its nested subheadings
+type HeadingGroup struct {
+	Main     Heading   // The H1 heading
+	Children []Heading // H2+ subheadings that follow this H1
+}
+
 // extractHeadings reads all headings from a markdown file
 func extractHeadings(filePath string) ([]Heading, error) {
 	file, err := os.Open(filePath)
@@ -117,6 +123,38 @@ func shouldSkipHeading(headingText string) bool {
 	return false
 }
 
+// buildHeadingGroups organizes headings into hierarchical groups
+// H1 headings become group mains, H2+ headings become children of the preceding H1
+func buildHeadingGroups(headings []Heading) []HeadingGroup {
+	var groups []HeadingGroup
+	var currentGroup *HeadingGroup
+
+	for _, heading := range headings {
+		if heading.Level == 1 {
+			// Save previous group if it exists
+			if currentGroup != nil {
+				groups = append(groups, *currentGroup)
+			}
+			// Start new group with this H1
+			currentGroup = &HeadingGroup{
+				Main:     heading,
+				Children: []Heading{},
+			}
+		} else if currentGroup != nil {
+			// Add subheading to current group
+			currentGroup.Children = append(currentGroup.Children, heading)
+		}
+		// If we encounter H2+ before any H1, we skip them (they have no parent)
+	}
+
+	// Don't forget to add the last group
+	if currentGroup != nil {
+		groups = append(groups, *currentGroup)
+	}
+
+	return groups
+}
+
 func main() {
 	zettelDir := os.Getenv("ZETTEL_DIR")
 	if zettelDir == "" {
@@ -139,8 +177,8 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Collect all headings from all files
-	var allHeadings []Heading
+	// Collect all heading groups from all files
+	var allGroups []HeadingGroup
 	for _, file := range files {
 		// Skip the index file itself
 		if filepath.Base(file) == "00-index.md" {
@@ -154,16 +192,21 @@ func main() {
 		}
 
 		// Filter out headings that should be skipped
+		var filteredHeadings []Heading
 		for _, heading := range headings {
 			if !shouldSkipHeading(heading.Text) {
-				allHeadings = append(allHeadings, heading)
+				filteredHeadings = append(filteredHeadings, heading)
 			}
 		}
+
+		// Build hierarchical groups for this file
+		groups := buildHeadingGroups(filteredHeadings)
+		allGroups = append(allGroups, groups...)
 	}
 
-	// Sort headings alphabetically by title (case-insensitive)
-	sort.Slice(allHeadings, func(i, j int) bool {
-		return allHeadings[i].SortKey < allHeadings[j].SortKey
+	// Sort groups alphabetically by the main heading's title (case-insensitive)
+	sort.Slice(allGroups, func(i, j int) bool {
+		return allGroups[i].Main.SortKey < allGroups[j].Main.SortKey
 	})
 
 	// Write to 00-index.md
@@ -183,9 +226,20 @@ func main() {
 	fmt.Fprintln(writer, "All headings from all notes, sorted alphabetically:")
 	fmt.Fprintln(writer)
 
-	// Write all headings as links
-	for _, heading := range allHeadings {
-		fmt.Fprintln(writer, formatObsidianLink(heading))
+	// Write all heading groups with level-based indentation
+	totalCount := 0
+	for _, group := range allGroups {
+		// Write main heading (H1) - no indentation
+		fmt.Fprintln(writer, formatObsidianLink(group.Main))
+		totalCount++
+
+		// Write children with indentation based on heading level
+		// H2 = 2 spaces, H3 = 4 spaces, etc.
+		for _, child := range group.Children {
+			indent := strings.Repeat(" ", (child.Level-1)*2)
+			fmt.Fprintf(writer, "%s%s\n", indent, formatObsidianLink(child))
+			totalCount++
+		}
 	}
 
 	if err := writer.Flush(); err != nil {
@@ -193,5 +247,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("✓ Created index with %d headings at %s\n", len(allHeadings), indexPath)
+	fmt.Printf("✓ Created index with %d headings (%d main, %d sub) at %s\n",
+		totalCount, len(allGroups), totalCount-len(allGroups), indexPath)
 }
