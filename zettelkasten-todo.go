@@ -119,7 +119,7 @@ func main() {
 	for _, file := range files {
 		// Skip the index and TODO files
 		basename := filepath.Base(file)
-		if basename == "00-index.md" || basename == "TODO.md" {
+		if basename == "00-index.md" || basename == "01-todo.md" {
 			continue
 		}
 
@@ -151,8 +151,8 @@ func main() {
 		return unfinishedNotes[i].SortKey < unfinishedNotes[j].SortKey
 	})
 
-	// Write to TODO.md
-	todoPath := filepath.Join(zettelDir, "TODO.md")
+	// Write to 01-todo.md
+	todoPath := filepath.Join(zettelDir, "01-todo.md")
 	todoFile, err := os.Create(todoPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating TODO file: %v\n", err)
