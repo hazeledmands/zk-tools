@@ -246,16 +246,10 @@ func main() {
 		fmt.Fprintln(writer)
 
 		for _, note := range both {
-			fmt.Fprintf(writer, "### [[%s#%s]]\n", note.FileID, note.Title)
-			fmt.Fprintf(writer, "- **Word count**: %d\n", note.WordCount)
-			fmt.Fprintf(writer, "- **Sections with #todo**: %d\n", len(note.TODOHeadings))
-			fmt.Fprintln(writer)
-			for _, heading := range note.TODOHeadings {
-				indent := strings.Repeat("  ", heading.Level-1)
-				fmt.Fprintf(writer, "%s- %s\n", indent, heading.Text)
-			}
-			fmt.Fprintln(writer)
+			fmt.Fprintf(writer, "- [[%s#%s]] (%d words, %d sections with #todo)\n",
+				note.FileID, note.Title, note.WordCount, len(note.TODOHeadings))
 		}
+		fmt.Fprintln(writer)
 	}
 
 	// Write notes with TODOs
@@ -266,16 +260,10 @@ func main() {
 		fmt.Fprintln(writer)
 
 		for _, note := range withTODO {
-			fmt.Fprintf(writer, "### [[%s#%s]]\n", note.FileID, note.Title)
-			fmt.Fprintf(writer, "- **Word count**: %d\n", note.WordCount)
-			fmt.Fprintf(writer, "- **Sections with #todo**: %d\n", len(note.TODOHeadings))
-			fmt.Fprintln(writer)
-			for _, heading := range note.TODOHeadings {
-				indent := strings.Repeat("  ", heading.Level-1)
-				fmt.Fprintf(writer, "%s- %s\n", indent, heading.Text)
-			}
-			fmt.Fprintln(writer)
+			fmt.Fprintf(writer, "- [[%s#%s]] (%d sections with #todo)\n",
+				note.FileID, note.Title, len(note.TODOHeadings))
 		}
+		fmt.Fprintln(writer)
 	}
 
 	// Write short notes
