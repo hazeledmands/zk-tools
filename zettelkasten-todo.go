@@ -9,15 +9,38 @@ import (
 	"strings"
 )
 
+// HeadingWithTODO represents a heading that has a #todo tag
+type HeadingWithTODO struct {
+	Text  string
+	Level int
+}
+
 // UnfinishedNote represents a note that needs attention
 type UnfinishedNote struct {
-	FileID      string
-	FilePath    string
-	Title       string
-	Reason      string
-	WordCount   int
-	TODOLines   []string
-	SortKey     string
+	FileID         string
+	FilePath       string
+	Title          string
+	WordCount      int
+	TODOHeadings   []HeadingWithTODO
+	SortKey        string
+}
+
+// extractKeywordsFromLine extracts hashtags from a line of text
+func extractKeywordsFromLine(line string) []string {
+	var keywords []string
+	words := strings.Fields(line)
+
+	for _, word := range words {
+		// Remove trailing punctuation
+		word = strings.TrimRight(word, ".,;:!?")
+		if strings.HasPrefix(word, "#") && len(word) > 1 {
+			// Remove the # prefix and normalize to lowercase
+			keyword := strings.ToLower(word[1:])
+			keywords = append(keywords, keyword)
+		}
+	}
+
+	return keywords
 }
 
 // extractNoteInfo reads a markdown file and extracts relevant information
@@ -35,7 +58,8 @@ func extractNoteInfo(filePath string) (*UnfinishedNote, error) {
 	frontMatterCount := 0
 	wordCount := 0
 	var title string
-	var todoLines []string
+	var todoHeadings []HeadingWithTODO
+	var lastHeading *HeadingWithTODO
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -56,16 +80,52 @@ func extractNoteInfo(filePath string) (*UnfinishedNote, error) {
 			continue
 		}
 
-		// Extract the first H1 heading as title
 		trimmed := strings.TrimSpace(line)
-		if title == "" && strings.HasPrefix(trimmed, "# ") {
-			title = strings.TrimSpace(trimmed[2:])
-		}
 
-		// Check for TODO markers (case-insensitive)
-		upperLine := strings.ToUpper(line)
-		if strings.Contains(upperLine, "TODO") || strings.Contains(upperLine, "FIXME") || strings.Contains(upperLine, "XXX") {
-			todoLines = append(todoLines, strings.TrimSpace(line))
+		// Check if line is a heading
+		if strings.HasPrefix(trimmed, "#") {
+			// Count the number of # symbols
+			level := 0
+			for _, char := range trimmed {
+				if char == '#' {
+					level++
+				} else {
+					break
+				}
+			}
+
+			// Check if there's a space after the # symbols (valid heading)
+			if len(trimmed) > level && (trimmed[level] == ' ' || trimmed[level] == '\t') {
+				// Extract heading text (remove # symbols and trim)
+				headingText := strings.TrimSpace(trimmed[level:])
+				if headingText != "" {
+					// Extract the first H1 heading as title
+					if title == "" && level == 1 {
+						title = headingText
+					}
+
+					// Track this heading for potential TODO association
+					lastHeading = &HeadingWithTODO{
+						Text:  headingText,
+						Level: level,
+					}
+				}
+			}
+		} else if strings.HasPrefix(trimmed, "- #") || strings.HasPrefix(trimmed, "* #") {
+			// This is a list item with a hashtag - extract keyword
+			// Remove the list marker (- or *)
+			content := strings.TrimSpace(trimmed[1:])
+
+			// Extract keyword(s) from the line
+			keywords := extractKeywordsFromLine(content)
+
+			// Check if any keyword is "todo"
+			for _, keyword := range keywords {
+				if keyword == "todo" && lastHeading != nil {
+					todoHeadings = append(todoHeadings, *lastHeading)
+					break
+				}
+			}
 		}
 
 		// Count words (simple word count - split by whitespace)
@@ -83,12 +143,12 @@ func extractNoteInfo(filePath string) (*UnfinishedNote, error) {
 	}
 
 	return &UnfinishedNote{
-		FileID:    fileID,
-		FilePath:  filePath,
-		Title:     title,
-		WordCount: wordCount,
-		TODOLines: todoLines,
-		SortKey:   strings.ToLower(title),
+		FileID:       fileID,
+		FilePath:     filePath,
+		Title:        title,
+		WordCount:    wordCount,
+		TODOHeadings: todoHeadings,
+		SortKey:      strings.ToLower(title),
 	}, nil
 }
 
@@ -130,18 +190,10 @@ func main() {
 		}
 
 		// Determine if this note is unfinished
-		reasons := []string{}
+		hasTODO := len(noteInfo.TODOHeadings) > 0
+		isShort := noteInfo.WordCount < 100
 
-		if len(noteInfo.TODOLines) > 0 {
-			reasons = append(reasons, fmt.Sprintf("Contains %d TODO marker(s)", len(noteInfo.TODOLines)))
-		}
-
-		if noteInfo.WordCount < 100 {
-			reasons = append(reasons, fmt.Sprintf("Only %d words", noteInfo.WordCount))
-		}
-
-		if len(reasons) > 0 {
-			noteInfo.Reason = strings.Join(reasons, ", ")
+		if hasTODO || isShort {
 			unfinishedNotes = append(unfinishedNotes, *noteInfo)
 		}
 	}
@@ -174,7 +226,7 @@ func main() {
 	both := []UnfinishedNote{}
 
 	for _, note := range unfinishedNotes {
-		hasTODO := len(note.TODOLines) > 0
+		hasTODO := len(note.TODOHeadings) > 0
 		isShort := note.WordCount < 100
 
 		if hasTODO && isShort {
@@ -190,18 +242,17 @@ func main() {
 	if len(both) > 0 {
 		fmt.Fprintln(writer, "## Short Notes with TODOs")
 		fmt.Fprintln(writer)
-		fmt.Fprintf(writer, "%d notes that are both short and contain TODO markers:\n", len(both))
+		fmt.Fprintf(writer, "%d notes that are both short and contain #todo tags:\n", len(both))
 		fmt.Fprintln(writer)
 
 		for _, note := range both {
 			fmt.Fprintf(writer, "### [[%s#%s]]\n", note.FileID, note.Title)
 			fmt.Fprintf(writer, "- **Word count**: %d\n", note.WordCount)
-			fmt.Fprintf(writer, "- **TODO markers**: %d\n", len(note.TODOLines))
-			if len(note.TODOLines) > 0 {
-				fmt.Fprintln(writer)
-				for _, todoLine := range note.TODOLines {
-					fmt.Fprintf(writer, "  - `%s`\n", todoLine)
-				}
+			fmt.Fprintf(writer, "- **Sections with #todo**: %d\n", len(note.TODOHeadings))
+			fmt.Fprintln(writer)
+			for _, heading := range note.TODOHeadings {
+				indent := strings.Repeat("  ", heading.Level-1)
+				fmt.Fprintf(writer, "%s- %s\n", indent, heading.Text)
 			}
 			fmt.Fprintln(writer)
 		}
@@ -209,18 +260,19 @@ func main() {
 
 	// Write notes with TODOs
 	if len(withTODO) > 0 {
-		fmt.Fprintln(writer, "## Notes with TODO Markers")
+		fmt.Fprintln(writer, "## Notes with #todo Tags")
 		fmt.Fprintln(writer)
-		fmt.Fprintf(writer, "%d notes containing TODO markers:\n", len(withTODO))
+		fmt.Fprintf(writer, "%d notes containing #todo tags:\n", len(withTODO))
 		fmt.Fprintln(writer)
 
 		for _, note := range withTODO {
 			fmt.Fprintf(writer, "### [[%s#%s]]\n", note.FileID, note.Title)
 			fmt.Fprintf(writer, "- **Word count**: %d\n", note.WordCount)
-			fmt.Fprintf(writer, "- **TODO markers**: %d\n", len(note.TODOLines))
+			fmt.Fprintf(writer, "- **Sections with #todo**: %d\n", len(note.TODOHeadings))
 			fmt.Fprintln(writer)
-			for _, todoLine := range note.TODOLines {
-				fmt.Fprintf(writer, "  - `%s`\n", todoLine)
+			for _, heading := range note.TODOHeadings {
+				indent := strings.Repeat("  ", heading.Level-1)
+				fmt.Fprintf(writer, "%s- %s\n", indent, heading.Text)
 			}
 			fmt.Fprintln(writer)
 		}
@@ -244,6 +296,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("✓ Created TODO list with %d unfinished notes (%d with TODOs, %d short, %d both) at %s\n",
+	fmt.Printf("✓ Created TODO list with %d unfinished notes (%d with #todo, %d short, %d both) at %s\n",
 		len(unfinishedNotes), len(withTODO), len(shortNotes), len(both), todoPath)
 }
