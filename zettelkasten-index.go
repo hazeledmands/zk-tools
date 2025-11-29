@@ -96,6 +96,19 @@ func getIDFromFilename(filename string) string {
 	return strings.TrimSuffix(base, ".md")
 }
 
+// makeSortKey creates a normalized sort key by removing leading special characters
+func makeSortKey(text string) string {
+	// Find the first letter or digit
+	for i, r := range text {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			// Start from the first alphanumeric character
+			return strings.ToLower(text[i:])
+		}
+	}
+	// If no alphanumeric characters found, use the whole text lowercased
+	return strings.ToLower(text)
+}
+
 // formatObsidianLink creates an Obsidian-style link to a heading
 func formatObsidianLink(heading Heading) string {
 	return fmt.Sprintf("[[%s#%s]]", heading.FileID, heading.Text)
