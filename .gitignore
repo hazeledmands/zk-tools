@@ -1,13 +1,6 @@
-# Old binaries (root directory)
-zettelkasten-index
-zettelkasten-todo
-list-keys
-remove-id-from-headings
-zettelkasten-new
-
-# New binaries (cmd/ subdirectories)
-cmd/*/zettelkasten-index
-cmd/*/zettelkasten-todo
-cmd/*/list-keys
-cmd/*/remove-id-from-headings
-cmd/*/zettelkasten-new
+# Binaries in root directory
+/zettelkasten-index
+/zettelkasten-todo
+/list-keys
+/remove-id-from-headings
+/zettelkasten-new
