@@ -166,3 +166,58 @@ The tool will:
 - Preserve all other content
 
 **Warning**: This tool modifies files in place. Make sure to back up your Zettelkasten before running it.
+
+## zettelkasten-index
+
+Generates an index file (`00-index.md`) containing all headings from all notes, sorted alphabetically by title.
+
+### Prerequisites
+
+- Go 1.21 or higher
+
+### Installation
+
+```bash
+go mod download
+go build -o zettelkasten-index zettelkasten-index.go
+```
+
+### Usage
+
+```bash
+./zettelkasten-index
+```
+
+Or specify a custom directory:
+
+```bash
+./zettelkasten-index /path/to/zettelkasten
+```
+
+### Environment Variables
+
+- `ZETTEL_DIR` - Path to your Zettelkasten directory (default: `~/Projects/Zettelkasten`)
+
+### Example
+
+```bash
+# Use default directory
+./zettelkasten-index
+
+# Use custom directory
+./zettelkasten-index ~/Documents/notes
+
+# Use environment variable
+export ZETTEL_DIR="$HOME/Documents/notes"
+./zettelkasten-index
+```
+
+The tool will:
+- Scan all `.md` files in the specified directory
+- Extract all headings (lines starting with `#`)
+- Skip YAML front-matter sections
+- Sort headings alphabetically by title (case-insensitive)
+- Generate links in Obsidian/markdown-oxide format: `[[202006141413#Heading Text]]`
+- Write the index to `00-index.md` in the Zettelkasten directory (the `00-` prefix ensures it appears at the top of file listings)
+
+This is useful for getting an overview of all topics covered in your Zettelkasten.
