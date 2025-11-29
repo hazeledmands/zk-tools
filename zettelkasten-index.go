@@ -11,10 +11,11 @@ import (
 
 // Heading represents a heading found in a markdown file
 type Heading struct {
-	Text     string // The heading text (without # symbols)
-	FileID   string // The file ID (filename without .md)
-	Level    int    // Heading level (number of # symbols)
-	SortKey  string // Lowercase version for case-insensitive sorting
+	Text     string   // The heading text (without # symbols)
+	FileID   string   // The file ID (filename without .md)
+	Level    int      // Heading level (number of # symbols)
+	SortKey  string   // Lowercase version for case-insensitive sorting
+	Keywords []string // Keywords associated with this heading (hashtags from lists)
 }
 
 // HeadingGroup represents an H1 heading with its nested subheadings
@@ -37,6 +38,7 @@ func extractHeadings(filePath string) ([]Heading, error) {
 	scanner := bufio.NewScanner(file)
 	inFrontMatter := false
 	frontMatterCount := 0
+	var lastH1Index *int // Track the index of the last H1 heading
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -70,15 +72,37 @@ func extractHeadings(filePath string) ([]Heading, error) {
 				}
 			}
 
-			// Extract heading text (remove # symbols and trim)
-			headingText := strings.TrimSpace(trimmed[level:])
-			if headingText != "" {
-				headings = append(headings, Heading{
-					Text:    headingText,
-					FileID:  fileID,
-					Level:   level,
-					SortKey: strings.ToLower(headingText),
-				})
+			// Check if there's a space after the # symbols (valid heading)
+			if len(trimmed) > level && (trimmed[level] == ' ' || trimmed[level] == '\t') {
+				// Extract heading text (remove # symbols and trim)
+				headingText := strings.TrimSpace(trimmed[level:])
+				if headingText != "" {
+					idx := len(headings)
+					headings = append(headings, Heading{
+						Text:     headingText,
+						FileID:   fileID,
+						Level:    level,
+						SortKey:  strings.ToLower(headingText),
+						Keywords: []string{},
+					})
+
+					// Track H1 headings for keyword association
+					if level == 1 {
+						lastH1Index = &idx
+					}
+				}
+			}
+		} else if strings.HasPrefix(trimmed, "- #") || strings.HasPrefix(trimmed, "* #") {
+			// This is a list item with a hashtag - extract keyword
+			// Remove the list marker (- or *)
+			content := strings.TrimSpace(trimmed[1:])
+
+			// Extract keyword(s) from the line
+			keywords := extractKeywordsFromLine(content)
+
+			// Associate keywords with the last H1 heading
+			if lastH1Index != nil && len(keywords) > 0 {
+				headings[*lastH1Index].Keywords = append(headings[*lastH1Index].Keywords, keywords...)
 			}
 		}
 	}
@@ -88,6 +112,24 @@ func extractHeadings(filePath string) ([]Heading, error) {
 	}
 
 	return headings, nil
+}
+
+// extractKeywordsFromLine extracts hashtags from a line of text
+func extractKeywordsFromLine(line string) []string {
+	var keywords []string
+	words := strings.Fields(line)
+
+	for _, word := range words {
+		// Remove trailing punctuation
+		word = strings.TrimRight(word, ".,;:!?")
+		if strings.HasPrefix(word, "#") && len(word) > 1 {
+			// Remove the # prefix and normalize to lowercase
+			keyword := strings.ToLower(word[1:])
+			keywords = append(keywords, keyword)
+		}
+	}
+
+	return keywords
 }
 
 // getIDFromFilename extracts the ID from the filename (without .md extension)
@@ -134,6 +176,27 @@ func shouldSkipHeading(headingText string) bool {
 		}
 	}
 	return false
+}
+
+// buildKeywordIndex creates a map from keywords to the headings that reference them
+func buildKeywordIndex(groups []HeadingGroup) map[string][]Heading {
+	keywordIndex := make(map[string][]Heading)
+
+	for _, group := range groups {
+		// Add keywords from the main H1 heading
+		for _, keyword := range group.Main.Keywords {
+			keywordIndex[keyword] = append(keywordIndex[keyword], group.Main)
+		}
+
+		// Add keywords from child headings
+		for _, child := range group.Children {
+			for _, keyword := range child.Keywords {
+				keywordIndex[keyword] = append(keywordIndex[keyword], child)
+			}
+		}
+	}
+
+	return keywordIndex
 }
 
 // buildHeadingGroups organizes headings into hierarchical groups
@@ -222,6 +285,16 @@ func main() {
 		return allGroups[i].Main.SortKey < allGroups[j].Main.SortKey
 	})
 
+	// Build keyword index
+	keywordIndex := buildKeywordIndex(allGroups)
+
+	// Get sorted list of keywords
+	var keywords []string
+	for keyword := range keywordIndex {
+		keywords = append(keywords, keyword)
+	}
+	sort.Strings(keywords)
+
 	// Write to 00-index.md
 	indexPath := filepath.Join(zettelDir, "00-index.md")
 	indexFile, err := os.Create(indexPath)
@@ -235,6 +308,27 @@ func main() {
 
 	// Write header
 	fmt.Fprintln(writer, "# Zettelkasten Index")
+	fmt.Fprintln(writer)
+
+	// Write keyword index if there are any keywords
+	if len(keywords) > 0 {
+		fmt.Fprintln(writer, "## Keywords")
+		fmt.Fprintln(writer)
+
+		for _, keyword := range keywords {
+			fmt.Fprintf(writer, "### #%s\n", keyword)
+			fmt.Fprintln(writer)
+
+			// Write all headings that reference this keyword
+			headings := keywordIndex[keyword]
+			for _, heading := range headings {
+				fmt.Fprintf(writer, "- %s\n", formatObsidianLink(heading))
+			}
+			fmt.Fprintln(writer)
+		}
+	}
+
+	fmt.Fprintln(writer, "## All Headings")
 	fmt.Fprintln(writer)
 	fmt.Fprintln(writer, "All headings from all notes, sorted alphabetically:")
 	fmt.Fprintln(writer)
@@ -260,6 +354,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("✓ Created index with %d headings (%d main, %d sub) at %s\n",
-		totalCount, len(allGroups), totalCount-len(allGroups), indexPath)
+	fmt.Printf("✓ Created index with %d headings (%d main, %d sub) and %d keywords at %s\n",
+		totalCount, len(allGroups), totalCount-len(allGroups), len(keywords), indexPath)
 }
