@@ -258,9 +258,12 @@ func main() {
 		}
 	}
 
-	// Sort by title
+	// Sort by backlinks (descending), then by word count (ascending)
 	sort.Slice(unfinishedNotes, func(i, j int) bool {
-		return unfinishedNotes[i].SortKey < unfinishedNotes[j].SortKey
+		if unfinishedNotes[i].BacklinkCount != unfinishedNotes[j].BacklinkCount {
+			return unfinishedNotes[i].BacklinkCount > unfinishedNotes[j].BacklinkCount
+		}
+		return unfinishedNotes[i].WordCount < unfinishedNotes[j].WordCount
 	})
 
 	// Write to 01-todo.md
