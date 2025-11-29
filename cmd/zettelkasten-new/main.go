@@ -5,25 +5,20 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/hazel/zk-tools/internal/zettel"
 )
 
 func main() {
-	zettelDir := os.Getenv("ZETTEL_DIR")
-	if zettelDir == "" {
-		zettelDir = filepath.Join(os.Getenv("HOME"), "Projects", "Zettelkasten")
-	}
-
-	if len(os.Args) > 1 {
-		zettelDir = os.Args[1]
-	}
+	zettelDir := zettel.GetZettelDirFromArgs(os.Args)
 
 	// Generate filename from current time: YYYYMMDDHHMM.md
 	now := time.Now()
 	filename := now.Format("200601021504") + ".md"
-	filepath := filepath.Join(zettelDir, filename)
+	filePath := filepath.Join(zettelDir, filename)
 
 	// Create the file
-	file, err := os.Create(filepath)
+	file, err := os.Create(filePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating file: %v\n", err)
 		os.Exit(1)

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/hazel/zk-tools/internal/zettel"
 )
 
 // removeIDFromHeading removes the ID prefix from headings in the format "# ID: Title"
@@ -54,17 +56,9 @@ func removeIDFromHeading(filePath string) error {
 }
 
 func main() {
-	zettelDir := os.Getenv("ZETTEL_DIR")
-	if zettelDir == "" {
-		zettelDir = filepath.Join(os.Getenv("HOME"), "Projects", "Zettelkasten")
-	}
+	zettelDir := zettel.GetZettelDirFromArgs(os.Args)
 
-	if len(os.Args) > 1 {
-		zettelDir = os.Args[1]
-	}
-
-	pattern := filepath.Join(zettelDir, "*.md")
-	files, err := filepath.Glob(pattern)
+	files, err := zettel.GetMarkdownFiles(zettelDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error finding markdown files: %v\n", err)
 		os.Exit(1)

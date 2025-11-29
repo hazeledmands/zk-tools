@@ -1,76 +1,27 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/hazel/zk-tools/internal/markdown"
+	"github.com/hazel/zk-tools/internal/zettel"
 )
 
 // moveKeywordsBelowHeading moves keywords from front-matter to below the first heading
 func moveKeywordsBelowHeading(filePath string) error {
-	file, err := os.Open(filePath)
+	// Extract keywords from front-matter
+	keywords, err := markdown.FrontMatterKeywords(filePath)
 	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	var frontMatterLines []string
-	var contentLines []string
-	inFrontMatter := false
-	frontMatterCount := 0
-
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		if line == "---" {
-			frontMatterCount++
-			if frontMatterCount == 1 {
-				inFrontMatter = true
-				continue
-			} else if frontMatterCount == 2 {
-				inFrontMatter = false
-				continue
-			}
-		}
-
-		if inFrontMatter && frontMatterCount == 1 {
-			frontMatterLines = append(frontMatterLines, line)
-		} else if frontMatterCount >= 2 {
-			contentLines = append(contentLines, line)
-		}
+		return err
 	}
 
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error reading file: %w", err)
-	}
-
-	if frontMatterCount < 2 {
-		return fmt.Errorf("no valid YAML front-matter found")
-	}
-
-	// Extract keyword values (the items in the list)
-	var keywords []string
-	inKeywords := false
-	for _, line := range frontMatterLines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "keywords:") {
-			inKeywords = true
-		} else if inKeywords {
-			// Check if this is still part of the keywords list (starts with -)
-			if strings.HasPrefix(trimmed, "-") {
-				// Extract the keyword value after the dash
-				keyword := strings.TrimSpace(strings.TrimPrefix(trimmed, "-"))
-				if keyword != "" {
-					keywords = append(keywords, keyword)
-				}
-			} else if trimmed != "" && !strings.HasPrefix(trimmed, "-") {
-				// We've reached a new key, stop collecting keywords
-				break
-			}
-		}
+	// Read content after front-matter
+	contentLines, err := markdown.ReadContentAfterFrontMatter(filePath)
+	if err != nil {
+		return err
 	}
 
 	// Find the first heading and insert keywords after it
@@ -110,17 +61,9 @@ func moveKeywordsBelowHeading(filePath string) error {
 }
 
 func main() {
-	zettelDir := os.Getenv("ZETTEL_DIR")
-	if zettelDir == "" {
-		zettelDir = filepath.Join(os.Getenv("HOME"), "Projects", "Zettelkasten")
-	}
+	zettelDir := zettel.GetZettelDirFromArgs(os.Args)
 
-	if len(os.Args) > 1 {
-		zettelDir = os.Args[1]
-	}
-
-	pattern := filepath.Join(zettelDir, "*.md")
-	files, err := filepath.Glob(pattern)
+	files, err := zettel.GetMarkdownFiles(zettelDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error finding markdown files: %v\n", err)
 		os.Exit(1)

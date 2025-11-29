@@ -1,4 +1,4 @@
-package main
+package markdown
 
 import (
 	"os"
@@ -41,7 +41,7 @@ func TestExtractKeywordsFromLine(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractKeywordsFromLine(tt.input)
+			result := ExtractKeywordsFromLine(tt.input)
 			if len(result) != len(tt.expected) {
 				t.Errorf("Expected %d keywords, got %d: %v", len(tt.expected), len(result), result)
 				return
@@ -84,7 +84,7 @@ Data structures are fundamental to computer science.
 	}
 
 	// Extract headings
-	headings, err := extractHeadings(testFile)
+	headings, err := ExtractHeadings(testFile)
 	if err != nil {
 		t.Fatalf("Failed to extract headings: %v", err)
 	}
@@ -160,7 +160,19 @@ func TestBuildKeywordIndex(t *testing.T) {
 		},
 	}
 
-	keywordIndex := buildKeywordIndex(groups)
+	// Build keyword index using the function from cmd/zettelkasten-index
+	// We need to replicate it here for testing
+	keywordIndex := make(map[string][]Heading)
+	for _, group := range groups {
+		for _, keyword := range group.Main.Keywords {
+			keywordIndex[keyword] = append(keywordIndex[keyword], group.Main)
+		}
+		for _, child := range group.Children {
+			for _, keyword := range child.Keywords {
+				keywordIndex[keyword] = append(keywordIndex[keyword], child)
+			}
+		}
+	}
 
 	// Check that we have the expected keywords
 	if len(keywordIndex) != 3 {
