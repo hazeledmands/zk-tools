@@ -214,7 +214,8 @@ Mixed content.
 	oldArgs := os.Args
 	defer func() { os.Args = oldArgs }()
 
-	os.Args = []string{"remove-id-from-headings", tmpDir}
+	// Use --yes to skip confirmation and --no-backup for cleaner tests
+	os.Args = []string{"remove-id-from-headings", "--yes", "--no-backup", tmpDir}
 
 	// Run main
 	main()

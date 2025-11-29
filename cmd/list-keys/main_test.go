@@ -201,7 +201,8 @@ More content.
 	oldArgs := os.Args
 	defer func() { os.Args = oldArgs }()
 
-	os.Args = []string{"list-keys", tmpDir}
+	// Use --yes to skip confirmation and --no-backup for cleaner tests
+	os.Args = []string{"list-keys", "--yes", "--no-backup", tmpDir}
 
 	// Run main - should succeed with these files
 	main()
