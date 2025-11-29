@@ -22,6 +22,7 @@ type UnfinishedNote struct {
 	Title          string
 	WordCount      int
 	TODOHeadings   []HeadingWithTODO
+	BacklinkCount  int
 	SortKey        string
 }
 
@@ -152,6 +153,60 @@ func extractNoteInfo(filePath string) (*UnfinishedNote, error) {
 	}, nil
 }
 
+// countBacklinks scans all markdown files and counts how many times each file is linked to
+func countBacklinks(files []string) map[string]int {
+	backlinkCounts := make(map[string]int)
+
+	for _, file := range files {
+		f, err := os.Open(file)
+		if err != nil {
+			continue
+		}
+
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			// Find all [[links]] in the line
+			// Regex would be better, but let's do a simple scan
+			start := 0
+			for {
+				idx := strings.Index(line[start:], "[[")
+				if idx == -1 {
+					break
+				}
+				idx += start
+
+				// Find the closing ]]
+				endIdx := strings.Index(line[idx:], "]]")
+				if endIdx == -1 {
+					break
+				}
+				endIdx += idx
+
+				// Extract the link content
+				linkContent := line[idx+2 : endIdx]
+
+				// Extract just the file ID (before # if present)
+				fileID := linkContent
+				if hashIdx := strings.Index(linkContent, "#"); hashIdx != -1 {
+					fileID = linkContent[:hashIdx]
+				}
+
+				if fileID != "" {
+					backlinkCounts[fileID]++
+				}
+
+				start = endIdx + 2
+			}
+		}
+
+		f.Close()
+	}
+
+	return backlinkCounts
+}
+
 func main() {
 	zettelDir := os.Getenv("ZETTEL_DIR")
 	if zettelDir == "" {
@@ -174,6 +229,9 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Count backlinks across all files
+	backlinkCounts := countBacklinks(files)
+
 	var unfinishedNotes []UnfinishedNote
 
 	for _, file := range files {
@@ -194,6 +252,8 @@ func main() {
 		isShort := noteInfo.WordCount < 100
 
 		if hasTODO || isShort {
+			// Add backlink count
+			noteInfo.BacklinkCount = backlinkCounts[noteInfo.FileID]
 			unfinishedNotes = append(unfinishedNotes, *noteInfo)
 		}
 	}
@@ -241,8 +301,8 @@ func main() {
 		fmt.Fprintln(writer)
 
 		for _, note := range withTODO {
-			fmt.Fprintf(writer, "- [[%s#%s]] (%d sections with #todo)\n",
-				note.FileID, note.Title, len(note.TODOHeadings))
+			fmt.Fprintf(writer, "- [[%s#%s]] (%d sections with #todo, %d backlinks)\n",
+				note.FileID, note.Title, len(note.TODOHeadings), note.BacklinkCount)
 		}
 		fmt.Fprintln(writer)
 	}
@@ -255,7 +315,8 @@ func main() {
 		fmt.Fprintln(writer)
 
 		for _, note := range shortNotes {
-			fmt.Fprintf(writer, "- [[%s#%s]] (%d words)\n", note.FileID, note.Title, note.WordCount)
+			fmt.Fprintf(writer, "- [[%s#%s]] (%d words, %d backlinks)\n",
+				note.FileID, note.Title, note.WordCount, note.BacklinkCount)
 		}
 		fmt.Fprintln(writer)
 	}
