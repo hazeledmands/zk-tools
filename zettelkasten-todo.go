@@ -17,13 +17,14 @@ type HeadingWithTODO struct {
 
 // UnfinishedNote represents a note that needs attention
 type UnfinishedNote struct {
-	FileID         string
-	FilePath       string
-	Title          string
-	WordCount      int
-	TODOHeadings   []HeadingWithTODO
-	BacklinkCount  int
-	SortKey        string
+	FileID            string
+	FilePath          string
+	Title             string
+	WordCount         int
+	TODOHeadings      []HeadingWithTODO
+	BacklinkCount     int
+	OutgoingLinkCount int
+	SortKey           string
 }
 
 // extractKeywordsFromLine extracts hashtags from a line of text
@@ -58,6 +59,7 @@ func extractNoteInfo(filePath string) (*UnfinishedNote, error) {
 	inFrontMatter := false
 	frontMatterCount := 0
 	wordCount := 0
+	outgoingLinkCount := 0
 	var title string
 	var todoHeadings []HeadingWithTODO
 	var lastHeading *HeadingWithTODO
@@ -132,6 +134,26 @@ func extractNoteInfo(filePath string) (*UnfinishedNote, error) {
 		// Count words (simple word count - split by whitespace)
 		words := strings.Fields(line)
 		wordCount += len(words)
+
+		// Count outgoing links [[...]]
+		start := 0
+		for {
+			idx := strings.Index(line[start:], "[[")
+			if idx == -1 {
+				break
+			}
+			idx += start
+
+			// Find the closing ]]
+			endIdx := strings.Index(line[idx:], "]]")
+			if endIdx == -1 {
+				break
+			}
+			endIdx += idx
+
+			outgoingLinkCount++
+			start = endIdx + 2
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -144,12 +166,13 @@ func extractNoteInfo(filePath string) (*UnfinishedNote, error) {
 	}
 
 	return &UnfinishedNote{
-		FileID:       fileID,
-		FilePath:     filePath,
-		Title:        title,
-		WordCount:    wordCount,
-		TODOHeadings: todoHeadings,
-		SortKey:      strings.ToLower(title),
+		FileID:            fileID,
+		FilePath:          filePath,
+		Title:             title,
+		WordCount:         wordCount,
+		TODOHeadings:      todoHeadings,
+		OutgoingLinkCount: outgoingLinkCount,
+		SortKey:           strings.ToLower(title),
 	}, nil
 }
 
@@ -286,6 +309,7 @@ func main() {
 	// Group by reason type (can overlap)
 	withTODO := []UnfinishedNote{}
 	shortNotes := []UnfinishedNote{}
+	orphanNotes := []UnfinishedNote{}
 
 	for _, note := range unfinishedNotes {
 		if len(note.TODOHeadings) > 0 {
@@ -294,6 +318,23 @@ func main() {
 		if note.WordCount < 100 {
 			shortNotes = append(shortNotes, note)
 		}
+		if note.BacklinkCount == 0 && note.OutgoingLinkCount == 0 {
+			orphanNotes = append(orphanNotes, note)
+		}
+	}
+
+	// Write orphan notes
+	if len(orphanNotes) > 0 {
+		fmt.Fprintln(writer, "## Orphan Notes")
+		fmt.Fprintln(writer)
+		fmt.Fprintf(writer, "%d notes with no incoming or outgoing links:\n", len(orphanNotes))
+		fmt.Fprintln(writer)
+
+		for _, note := range orphanNotes {
+			fmt.Fprintf(writer, "- [[%s#%s]] (%d words)\n",
+				note.FileID, note.Title, note.WordCount)
+		}
+		fmt.Fprintln(writer)
 	}
 
 	// Write notes with TODOs
@@ -329,6 +370,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("✓ Created TODO list with %d unfinished notes (%d with #todo, %d short) at %s\n",
-		len(unfinishedNotes), len(withTODO), len(shortNotes), todoPath)
+	fmt.Printf("✓ Created TODO list with %d unfinished notes (%d orphans, %d with #todo, %d short) at %s\n",
+		len(unfinishedNotes), len(orphanNotes), len(withTODO), len(shortNotes), todoPath)
 }
