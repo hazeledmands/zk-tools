@@ -220,36 +220,17 @@ func main() {
 	fmt.Fprintf(writer, "Notes that need attention (%d total):\n", len(unfinishedNotes))
 	fmt.Fprintln(writer)
 
-	// Group by reason type
+	// Group by reason type (can overlap)
 	withTODO := []UnfinishedNote{}
 	shortNotes := []UnfinishedNote{}
-	both := []UnfinishedNote{}
 
 	for _, note := range unfinishedNotes {
-		hasTODO := len(note.TODOHeadings) > 0
-		isShort := note.WordCount < 100
-
-		if hasTODO && isShort {
-			both = append(both, note)
-		} else if hasTODO {
+		if len(note.TODOHeadings) > 0 {
 			withTODO = append(withTODO, note)
-		} else if isShort {
+		}
+		if note.WordCount < 100 {
 			shortNotes = append(shortNotes, note)
 		}
-	}
-
-	// Write notes with both issues
-	if len(both) > 0 {
-		fmt.Fprintln(writer, "## Short Notes with TODOs")
-		fmt.Fprintln(writer)
-		fmt.Fprintf(writer, "%d notes that are both short and contain #todo tags:\n", len(both))
-		fmt.Fprintln(writer)
-
-		for _, note := range both {
-			fmt.Fprintf(writer, "- [[%s#%s]] (%d words, %d sections with #todo)\n",
-				note.FileID, note.Title, note.WordCount, len(note.TODOHeadings))
-		}
-		fmt.Fprintln(writer)
 	}
 
 	// Write notes with TODOs
@@ -284,6 +265,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("✓ Created TODO list with %d unfinished notes (%d with #todo, %d short, %d both) at %s\n",
-		len(unfinishedNotes), len(withTODO), len(shortNotes), len(both), todoPath)
+	fmt.Printf("✓ Created TODO list with %d unfinished notes (%d with #todo, %d short) at %s\n",
+		len(unfinishedNotes), len(withTODO), len(shortNotes), todoPath)
 }
