@@ -95,7 +95,7 @@ FP emphasizes immutability.
 		}
 	}
 
-	// Verify headings are present
+	// Verify headings are present with word count and backlink info
 	expectedHeadings := []string{
 		"[[note1#Programming Concepts]]",
 		"[[note2#Data Structures]]",
@@ -108,6 +108,14 @@ FP emphasizes immutability.
 		if !strings.Contains(indexContent, heading) {
 			t.Errorf("Index missing heading: %s", heading)
 		}
+	}
+
+	// Verify that word count and backlink info is present
+	if !strings.Contains(indexContent, "words:") {
+		t.Error("Index missing word count information")
+	}
+	if !strings.Contains(indexContent, "backlinks:") {
+		t.Error("Index missing backlink information")
 	}
 
 	// Verify subheadings appear with proper indentation
@@ -188,5 +196,52 @@ func TestIndexGeneration_HandlesNoKeywords(t *testing.T) {
 	// Should still have the heading
 	if !strings.Contains(indexContent, "[[plain#Plain Note]]") {
 		t.Error("Index should contain heading even without keywords")
+	}
+}
+
+func TestIndexGeneration_CountsBacklinks(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create notes with backlinks
+	note1 := filepath.Join(tmpDir, "note1.md")
+	os.WriteFile(note1, []byte(`# First Note
+
+This is the first note with some content.
+
+See also: [[note2#Second Note]]
+`), 0644)
+
+	note2 := filepath.Join(tmpDir, "note2.md")
+	os.WriteFile(note2, []byte(`# Second Note
+
+This note is referenced by note1.
+Also references [[note2#Second Note]] itself.
+And references [[note1#First Note]].
+`), 0644)
+
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	os.Args = []string{"zettelkasten-index", tmpDir}
+
+	main()
+
+	// Read index
+	indexPath := filepath.Join(tmpDir, "00-index.md")
+	content, err := os.ReadFile(indexPath)
+	if err != nil {
+		t.Fatalf("Failed to read index: %v", err)
+	}
+
+	indexContent := string(content)
+
+	// Second Note should have 2 backlinks (one from note1, one from itself)
+	if !strings.Contains(indexContent, "[[note2#Second Note]] (words:") {
+		t.Error("Index should contain Second Note with stats")
+	}
+
+	// First Note should have 1 backlink (from note2)
+	if !strings.Contains(indexContent, "[[note1#First Note]] (words:") {
+		t.Error("Index should contain First Note with stats")
 	}
 }

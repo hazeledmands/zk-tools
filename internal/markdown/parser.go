@@ -114,7 +114,8 @@ func ExtractHeadings(filePath string) ([]Heading, error) {
 	scanner := bufio.NewScanner(file)
 	inFrontMatter := false
 	frontMatterCount := 0
-	var lastH1Index *int // Track the index of the last H1 heading
+	var lastH1Index *int       // Track the index of the last H1 heading
+	var currentHeadingIndex *int // Track the current heading for word counting
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -155,17 +156,21 @@ func ExtractHeadings(filePath string) ([]Heading, error) {
 				if headingText != "" {
 					idx := len(headings)
 					headings = append(headings, Heading{
-						Text:     headingText,
-						FileID:   fileID,
-						Level:    level,
-						SortKey:  strings.ToLower(headingText),
-						Keywords: []string{},
+						Text:      headingText,
+						FileID:    fileID,
+						Level:     level,
+						SortKey:   strings.ToLower(headingText),
+						Keywords:  []string{},
+						WordCount: 0,
 					})
 
 					// Track H1 headings for keyword association
 					if level == 1 {
 						lastH1Index = &idx
 					}
+
+					// Update current heading for word counting
+					currentHeadingIndex = &idx
 				}
 			}
 		} else if strings.HasPrefix(trimmed, "- #") || strings.HasPrefix(trimmed, "* #") {
@@ -179,6 +184,16 @@ func ExtractHeadings(filePath string) ([]Heading, error) {
 			// Associate keywords with the last H1 heading
 			if lastH1Index != nil && len(keywords) > 0 {
 				headings[*lastH1Index].Keywords = append(headings[*lastH1Index].Keywords, keywords...)
+			}
+
+			// Count words in this line for the current heading
+			if currentHeadingIndex != nil {
+				headings[*currentHeadingIndex].WordCount += len(strings.Fields(line))
+			}
+		} else {
+			// Count words in content lines for the current heading
+			if currentHeadingIndex != nil {
+				headings[*currentHeadingIndex].WordCount += len(strings.Fields(line))
 			}
 		}
 	}

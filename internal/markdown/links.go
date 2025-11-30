@@ -67,6 +67,44 @@ func ExtractLinksFromLine(line string) []string {
 	return links
 }
 
+// ExtractHeadingLinksFromLine extracts all [[...#...]] heading links from a line
+// Returns a map of "fileID#headingText" -> count
+func ExtractHeadingLinksFromLine(line string) map[string]int {
+	linkCounts := make(map[string]int)
+	start := 0
+	for {
+		idx := strings.Index(line[start:], "[[")
+		if idx == -1 {
+			break
+		}
+		idx += start
+
+		// Find the closing ]]
+		endIdx := strings.Index(line[idx:], "]]")
+		if endIdx == -1 {
+			break
+		}
+		endIdx += idx
+
+		// Extract the link content
+		linkContent := line[idx+2 : endIdx]
+
+		// Check if this is a heading link (contains #)
+		if hashIdx := strings.Index(linkContent, "#"); hashIdx != -1 {
+			fileID := linkContent[:hashIdx]
+			headingText := linkContent[hashIdx+1:]
+
+			if fileID != "" && headingText != "" {
+				key := fileID + "#" + headingText
+				linkCounts[key]++
+			}
+		}
+
+		start = endIdx + 2
+	}
+	return linkCounts
+}
+
 // CountBacklinks scans all markdown files and counts how many times each file is linked to
 func CountBacklinks(files []string) (map[string]int, error) {
 	backlinkCounts := make(map[string]int)
@@ -83,6 +121,32 @@ func CountBacklinks(files []string) (map[string]int, error) {
 			links := ExtractLinksFromLine(line)
 			for _, link := range links {
 				backlinkCounts[link]++
+			}
+		}
+
+		f.Close()
+	}
+
+	return backlinkCounts, nil
+}
+
+// CountHeadingBacklinks scans all markdown files and counts backlinks to specific headings
+// Returns a map of "fileID#headingText" -> count
+func CountHeadingBacklinks(files []string) (map[string]int, error) {
+	backlinkCounts := make(map[string]int)
+
+	for _, file := range files {
+		f, err := os.Open(file)
+		if err != nil {
+			continue
+		}
+
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := scanner.Text()
+			linkCounts := ExtractHeadingLinksFromLine(line)
+			for link, count := range linkCounts {
+				backlinkCounts[link] += count
 			}
 		}
 

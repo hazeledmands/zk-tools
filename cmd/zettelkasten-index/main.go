@@ -47,6 +47,12 @@ func main() {
 		os.Exit(0)
 	}
 
+	// Count backlinks to headings across all files
+	backlinkCounts, err := markdown.CountHeadingBacklinks(files)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to count backlinks: %v\n", err)
+	}
+
 	// Collect all heading groups from all files
 	var allGroups []markdown.HeadingGroup
 	for _, file := range files {
@@ -65,6 +71,9 @@ func main() {
 		var filteredHeadings []markdown.Heading
 		for _, heading := range headings {
 			if !markdown.ShouldSkipHeading(heading.Text) {
+				// Update backlink count for this heading
+				backlinkKey := heading.FileID + "#" + heading.Text
+				heading.BacklinkCount = backlinkCounts[backlinkKey]
 				filteredHeadings = append(filteredHeadings, heading)
 			}
 		}
@@ -116,7 +125,10 @@ func main() {
 			// Write all headings that reference this keyword
 			headings := keywordIndex[keyword]
 			for _, heading := range headings {
-				fmt.Fprintf(writer, "- %s\n", markdown.FormatObsidianLink(heading))
+				fmt.Fprintf(writer, "- %s (words: %d, backlinks: %d)\n",
+					markdown.FormatObsidianLink(heading),
+					heading.WordCount,
+					heading.BacklinkCount)
 			}
 			fmt.Fprintln(writer)
 		}
@@ -131,14 +143,22 @@ func main() {
 	totalCount := 0
 	for _, group := range allGroups {
 		// Write main heading (H1) - no indentation
-		fmt.Fprintln(writer, markdown.FormatObsidianLink(group.Main))
+		// Format: [[link]] (words: N, backlinks: N)
+		fmt.Fprintf(writer, "%s (words: %d, backlinks: %d)\n",
+			markdown.FormatObsidianLink(group.Main),
+			group.Main.WordCount,
+			group.Main.BacklinkCount)
 		totalCount++
 
 		// Write children with indentation based on heading level
 		// H2 = 2 spaces, H3 = 4 spaces, etc.
 		for _, child := range group.Children {
 			indent := strings.Repeat(" ", (child.Level-1)*2)
-			fmt.Fprintf(writer, "%s%s\n", indent, markdown.FormatObsidianLink(child))
+			fmt.Fprintf(writer, "%s%s (words: %d, backlinks: %d)\n",
+				indent,
+				markdown.FormatObsidianLink(child),
+				child.WordCount,
+				child.BacklinkCount)
 			totalCount++
 		}
 	}
